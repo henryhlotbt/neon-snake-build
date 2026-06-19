@@ -1,0 +1,228 @@
+import pygame
+import random
+import sys
+import os
+import json
+
+pygame.init()
+pygame.mixer.init()
+
+# ---------- SCREEN ----------
+WIDTH, HEIGHT = 900, 600
+GRID = 30
+GRID_W = WIDTH // GRID
+GRID_H = HEIGHT // GRID
+
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("NEON SNAKE ULTRA")
+clock = pygame.time.Clock()
+
+# ---------- COLORS ----------
+BG = (10, 10, 20)
+HUD = (15, 15, 30)
+WHITE = (240, 240, 240)
+
+skins = {
+    "green": (57, 255, 20),
+    "fire": (255, 80, 0),
+    "ice": (0, 220, 255),
+    "purple": (180, 0, 255)
+}
+
+# ---------- SOUNDS ----------
+try:
+    eat_sound = pygame.mixer.Sound("sounds/eat.wav")
+    gameover_sound = pygame.mixer.Sound("sounds/gameover.wav")
+    click_sound = pygame.mixer.Sound("sounds/click.wav")
+except:
+    eat_sound = gameover_sound = click_sound = None
+
+# ---------- SAVE SYSTEM ----------
+SAVE_FILE = "save.json"
+
+def load_save():
+    if os.path.exists(SAVE_FILE):
+        with open(SAVE_FILE, "r") as f:
+            return json.load(f)
+    return {"coins": 0, "highscore": 0, "skin": "green"}
+
+def save_data(data):
+    with open(SAVE_FILE, "w") as f:
+        json.dump(data, f)
+
+data = load_save()
+
+# ---------- BUTTONS ----------
+BTN = {
+    "UP": pygame.Rect(780, 320, 90, 90),
+    "DOWN": pygame.Rect(780, 500, 90, 90),
+    "LEFT": pygame.Rect(680, 410, 90, 90),
+    "RIGHT": pygame.Rect(880, 410, 90, 90),
+    "PAUSE": pygame.Rect(20, 20, 120, 60)
+}
+
+font = pygame.font.SysFont("arial", 26)
+big_font = pygame.font.SysFont("arial", 50)
+
+def draw_button(name, rect):
+    pygame.draw.rect(screen, (0, 255, 255), rect.move(3, 3), border_radius=12)
+    pygame.draw.rect(screen, (25, 25, 50), rect, border_radius=12)
+    txt = font.render(name, True, (0, 255, 255))
+    screen.blit(txt, txt.get_rect(center=rect.center))
+
+# ---------- BOSS ----------
+boss = [(15, 10)]
+
+def move_boss(player):
+    head = boss[0]
+    dx = 1 if player[0] > head[0] else -1 if player[0] < head[0] else 0
+    dy = 1 if player[1] > head[1] else -1 if player[1] < head[1] else 0
+
+    new = (head[0] + dx, head[1] + dy)
+    boss.insert(0, new)
+    boss.pop()
+
+# ---------- GAME ----------
+def game():
+    snake = [(10, 10)]
+    direction = (0, 0)
+
+    food = (random.randint(0, GRID_W-1), random.randint(0, GRID_H-1))
+
+    score = 0
+    coins = data["coins"]
+    skin = data["skin"]
+    high = data["highscore"]
+
+    paused = False
+    game_over = False
+
+    speed = 7
+
+    while True:
+        screen.fill(BG)
+
+        # ---------- EVENTS ----------
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                pos = event.pos
+
+                if game_over:
+                    return
+
+                if BTN["PAUSE"].collidepoint(pos):
+                    paused = not paused
+                    if click_sound: click_sound.play()
+
+                if not paused and not game_over:
+                    if BTN["UP"].collidepoint(pos):
+                        direction = (0, -1)
+                    elif BTN["DOWN"].collidepoint(pos):
+                        direction = (0, 1)
+                    elif BTN["LEFT"].collidepoint(pos):
+                        direction = (-1, 0)
+                    elif BTN["RIGHT"].collidepoint(pos):
+                        direction = (1, 0)
+
+        # ---------- GAME LOGIC ----------
+        if not paused and not game_over and direction != (0, 0):
+
+            hx, hy = snake[0]
+            dx, dy = direction
+            new = (hx + dx, hy + dy)
+
+            if new[0] < 0 or new[0] >= GRID_W or new[1] < 0 or new[1] >= GRID_H:
+                game_over = True
+
+            if new in snake:
+                game_over = True
+
+            if new in boss:
+                game_over = True
+
+            if not game_over:
+                snake.insert(0, new)
+
+                if new == food:
+                    score += 10
+                    coins += 1
+                    food = (random.randint(0, GRID_W-1), random.randint(0, GRID_H-1))
+                    speed += 0.1
+                    if eat_sound: eat_sound.play()
+                else:
+                    snake.pop()
+
+                move_boss(snake[0])
+
+        # ---------- DRAW HUD ----------
+        pygame.draw.rect(screen, HUD, (0, 0, WIDTH, 80))
+        screen.blit(font.render(f"Score: {score}", True, (0,255,255)), (20, 20))
+        screen.blit(font.render(f"Coins: {coins}", True, (255,215,0)), (220, 20))
+        screen.blit(font.render(f"Skin: {skin}", True, WHITE), (400, 20))
+
+        # ---------- DRAW SNAKE ----------
+        color = skins.get(skin, (57,255,20))
+        for i, s in enumerate(snake):
+            pygame.draw.rect(screen,
+                             color if i == 0 else (0,200,255),
+                             (s[0]*GRID, s[1]*GRID, GRID-2, GRID-2),
+                             border_radius=6)
+
+        # ---------- FOOD ----------
+        pygame.draw.rect(screen, (255,20,147),
+                         (food[0]*GRID, food[1]*GRID, GRID-2, GRID-2),
+                         border_radius=6)
+
+        # ---------- BOSS ----------
+        for b in boss:
+            pygame.draw.rect(screen, (255,0,0),
+                             (b[0]*GRID, b[1]*GRID, GRID-2, GRID-2))
+
+        # ---------- BUTTONS ----------
+        for k, v in BTN.items():
+            draw_button(k, v)
+
+        # ---------- GAME OVER ----------
+        if game_over:
+            if score > high:
+                data["highscore"] = score
+
+            data["coins"] = coins
+            data["skin"] = skin
+            save_data(data)
+
+            if gameover_sound: gameover_sound.play()
+
+            t = big_font.render("GAME OVER", True, (255,0,0))
+            screen.blit(t, (300, 250))
+
+        pygame.display.flip()
+        clock.tick(int(speed))
+
+# ---------- MENU ----------
+def menu():
+    while True:
+        screen.fill(BG)
+
+        title = big_font.render("NEON SNAKE ULTRA", True, (0,255,255))
+        screen.blit(title, (240, 200))
+
+        start = font.render("Tap to Start", True, WHITE)
+        screen.blit(start, (380, 320))
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                game()
+
+        pygame.display.flip()
+        clock.tick(10)
+
+menu()
